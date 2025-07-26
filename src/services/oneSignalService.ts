@@ -247,7 +247,7 @@ export class OneSignalService {
 // Create singleton instance
 // You'll need to get your OneSignal App ID from https://onesignal.com
 const oneSignalConfig: OneSignalConfig = {
-  appId: process.env.VITE_ONESIGNAL_APP_ID || 'your-onesignal-app-id-here',
+  appId: process.env.VITE_ONESIGNAL_APP_ID || 'e0482bdf-8fc8-4e77-891a-4ef547464ef0',
   safariWebId: process.env.VITE_ONESIGNAL_SAFARI_WEB_ID, // Optional for Safari
   notificationClickHandlerMatch: 'origin',
   notificationClickHandlerAction: 'focus'
