@@ -1,5 +1,6 @@
 // src/services/unifiedNotificationService.ts
 import { createClient } from '@supabase/supabase-js'
+import { oneSignalService } from './oneSignalService'
 
 // ✅ Enhanced environment variable handling with fallbacks and validation
 const getSupabaseConfig = () => {
@@ -83,10 +84,14 @@ export class UnifiedNotificationService {
   private retryTimeout: NodeJS.Timeout | null = null
   private isSupabaseAvailable = !!supabase
 
-  // Service Worker for push notifications
+  // Service Worker for push notifications (legacy)
   private serviceWorkerRegistration: ServiceWorkerRegistration | null = null
   private pushSubscription: PushSubscription | null = null
   private audioContext: AudioContext | null = null
+
+  // OneSignal integration
+  private isOneSignalInitialized = false
+  private oneSignalEnabled = true // Can be toggled based on user preference
 
   // Event listeners
   private inAppListeners: NotificationListener[] = []
@@ -121,8 +126,16 @@ export class UnifiedNotificationService {
     console.log('[UnifiedNotificationService] Initializing unified notification service...')
     
     try {
-      // Initialize both in-app and push notifications in parallel
-      const initPromises = [this.initializePushNotifications()]
+      // Initialize all notification systems in parallel
+      const initPromises = []
+      
+      // Initialize OneSignal first (most reliable for mobile)
+      if (this.oneSignalEnabled) {
+        initPromises.push(this.initializeOneSignal())
+      }
+      
+      // Initialize legacy push notifications as fallback
+      initPromises.push(this.initializePushNotifications())
       
       // Only initialize Supabase if it's available
       if (this.isSupabaseAvailable) {
@@ -139,6 +152,18 @@ export class UnifiedNotificationService {
     } catch (error) {
       console.error('[UnifiedNotificationService] Initialization failed:', error)
       // Don't throw error - allow service to work in degraded mode
+    }
+  }
+
+  private async initializeOneSignal() {
+    try {
+      console.log('[UnifiedNotificationService] Initializing OneSignal...')
+      await oneSignalService.initialize()
+      this.isOneSignalInitialized = true
+      console.log('[UnifiedNotificationService] OneSignal initialized successfully')
+    } catch (error) {
+      console.error('[UnifiedNotificationService] OneSignal initialization failed:', error)
+      this.isOneSignalInitialized = false
     }
   }
 
@@ -224,7 +249,7 @@ export class UnifiedNotificationService {
     }
 
     try {
-      console.log('[UnifiedNotificationService] Initializing push notifications...')
+      console.log('[UnifiedNotificationService] Initializing legacy push notifications...')
 
       // Register service worker
       this.serviceWorkerRegistration = await navigator.serviceWorker.register('/service-worker.js', {
@@ -237,9 +262,9 @@ export class UnifiedNotificationService {
       // Listen for service worker messages
       navigator.serviceWorker.addEventListener('message', this.handleServiceWorkerMessage.bind(this))
 
-      console.log('[UnifiedNotificationService] Push notification system ready')
+      console.log('[UnifiedNotificationService] Legacy push notification system ready')
     } catch (error) {
-      console.error('[UnifiedNotificationService] Push notification initialization failed:', error)
+      console.error('[UnifiedNotificationService] Legacy push notification initialization failed:', error)
     }
   }
 
@@ -248,6 +273,63 @@ export class UnifiedNotificationService {
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
     } catch (error) {
       console.warn('[UnifiedNotificationService] Audio context not supported:', error)
+    }
+  }
+
+  // ===========================================
+  // ONESIGNAL INTEGRATION METHODS
+  // ===========================================
+
+  async subscribeToOneSignal(userId?: string): Promise<boolean> {
+    if (!this.isOneSignalInitialized) {
+      try {
+        await this.initializeOneSignal()
+      } catch (error) {
+        console.error('[UnifiedNotificationService] Failed to initialize OneSignal:', error)
+        return false
+      }
+    }
+
+    try {
+      const success = await oneSignalService.subscribeUser(userId)
+      if (success) {
+        console.log('[UnifiedNotificationService] Successfully subscribed to OneSignal')
+        
+        // Set user tags for better targeting
+        if (userId) {
+          await oneSignalService.setTags({
+            user_id: userId,
+            app_name: 'MCM Alerts',
+            subscription_date: new Date().toISOString()
+          })
+        }
+      }
+      return success
+    } catch (error) {
+      console.error('[UnifiedNotificationService] OneSignal subscription failed:', error)
+      return false
+    }
+  }
+
+  async unsubscribeFromOneSignal(): Promise<boolean> {
+    if (!this.isOneSignalInitialized) return true
+
+    try {
+      return await oneSignalService.unsubscribeUser()
+    } catch (error) {
+      console.error('[UnifiedNotificationService] OneSignal unsubscription failed:', error)
+      return false
+    }
+  }
+
+  async isOneSignalSubscribed(): Promise<boolean> {
+    if (!this.isOneSignalInitialized) return false
+
+    try {
+      return await oneSignalService.isSubscribed()
+    } catch (error) {
+      console.error('[UnifiedNotificationService] Error checking OneSignal subscription:', error)
+      return false
     }
   }
 
@@ -291,7 +373,7 @@ export class UnifiedNotificationService {
       }
     })
 
-    // Show browser notification if permitted
+    // Show browser notification if permitted (fallback when app is open)
     this.showBrowserNotification(notification)
     
     // Play sound
@@ -337,6 +419,20 @@ export class UnifiedNotificationService {
   // ===========================================
 
   async requestNotificationPermission(): Promise<boolean> {
+    // Try OneSignal first (more reliable for mobile)
+    if (this.isOneSignalInitialized) {
+      try {
+        const oneSignalPermission = await oneSignalService.requestPermission()
+        if (oneSignalPermission) {
+          console.log('[UnifiedNotificationService] OneSignal permission granted')
+          return true
+        }
+      } catch (error) {
+        console.error('[UnifiedNotificationService] OneSignal permission request failed:', error)
+      }
+    }
+
+    // Fallback to browser notifications
     if (!('Notification' in window)) {
       console.warn('[UnifiedNotificationService] Browser notifications not supported')
       return false
@@ -344,7 +440,7 @@ export class UnifiedNotificationService {
 
     try {
       const permission = await Notification.requestPermission()
-      console.log('[UnifiedNotificationService] Notification permission result:', permission)
+      console.log('[UnifiedNotificationService] Browser notification permission result:', permission)
       return permission === 'granted'
     } catch (error) {
       console.error('[UnifiedNotificationService] Error requesting notification permission:', error)
@@ -613,7 +709,8 @@ export class UnifiedNotificationService {
 
   async sendTestNotification(
     priority: 'low' | 'medium' | 'high' | 'urgent' = 'medium',
-    testPush = false
+    testPush = false,
+    testOneSignal = false
   ) {
     try {
       const notification: UnifiedNotification = {
@@ -630,8 +727,18 @@ export class UnifiedNotificationService {
         acknowledged: false
       }
 
+      // Test OneSignal notification
+      if (testOneSignal && this.isOneSignalInitialized) {
+        try {
+          await oneSignalService.sendTestNotification()
+          console.log('[UnifiedNotificationService] OneSignal test notification sent')
+        } catch (error) {
+          console.warn('[UnifiedNotificationService] OneSignal test failed:', error)
+        }
+      }
+
+      // Test legacy push notification
       if (testPush && this.pushSubscription) {
-        // Send push notification via backend
         try {
           await fetch('/api/push-test', {
             method: 'POST',
@@ -639,7 +746,7 @@ export class UnifiedNotificationService {
             body: JSON.stringify({ notification, subscription: this.pushSubscription })
           })
         } catch (error) {
-          console.warn('[UnifiedNotificationService] Push test failed:', error)
+          console.warn('[UnifiedNotificationService] Legacy push test failed:', error)
         }
       }
 
@@ -729,6 +836,11 @@ export class UnifiedNotificationService {
         connectionState: this.connectionState,
         retryCount: this.supabaseRetryCount,
         isAvailable: this.isSupabaseAvailable
+      },
+      oneSignal: {
+        isInitialized: this.isOneSignalInitialized,
+        enabled: this.oneSignalEnabled,
+        status: oneSignalService.getStatus()
       },
       push: {
         serviceWorkerRegistered: !!this.serviceWorkerRegistration,
