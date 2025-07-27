@@ -1,9 +1,9 @@
 // src/components/InAppNotificationSystem.tsx
-
 import React, { useEffect, useState } from 'react';
-import { X, Bell, Wifi, WifiOff, AlertCircle, CheckCircle, Info } from 'lucide-react';
+import { X, Bell, Wifi, WifiOff, AlertCircle, CheckCircle, Info, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
 import { toast } from '@/components/ui/sonner';
 import { unifiedNotificationService, UnifiedNotification } from '@/services/unifiedNotificationService';
 
@@ -15,13 +15,19 @@ interface DisplayNotification extends UnifiedNotification {
 const InAppNotificationSystem: React.FC = () => {
   const [notifications, setNotifications] = useState<DisplayNotification[]>([]);
   const [connectionStatus, setConnectionStatus] = useState(unifiedNotificationService.getConnectionStatus());
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     const initializeService = async () => {
       try {
         console.log('Initializing unified notification service...');
-        await unifiedNotificationService.initialize();
-        console.log('Unified notification service initialized successfully');
+        const success = await unifiedNotificationService.initialize();
+        if (success) {
+          console.log('Unified notification service initialized successfully');
+        } else {
+          console.warn('Notification service initialization had issues');
+          toast.error('Some notification features may not work properly');
+        }
       } catch (error) {
         console.error('Failed to initialize unified notification service:', error);
         toast.error('Failed to initialize notifications. Some features may not work.');
@@ -87,7 +93,6 @@ const InAppNotificationSystem: React.FC = () => {
       unsubscribeInApp();
       unsubscribePush();
       clearInterval(statusInterval);
-      unifiedNotificationService.disconnect();
     };
   }, []);
 
@@ -121,7 +126,7 @@ const InAppNotificationSystem: React.FC = () => {
         .filter(n => n.isVisible)
         .map(n => n.id);
       
-      // Mark each as read (you might want to add a batch operation to your service)
+      // Mark each as read
       await Promise.all(
         visibleNotificationIds.map(id => unifiedNotificationService.markAsRead(id))
       );
@@ -138,6 +143,46 @@ const InAppNotificationSystem: React.FC = () => {
     setTimeout(() => {
       setNotifications([]);
     }, 300);
+  };
+
+  const handleSubscribeToPush = async () => {
+    try {
+      const subscription = await unifiedNotificationService.subscribeToPush();
+      if (subscription) {
+        toast.success('Successfully subscribed to push notifications!');
+        setConnectionStatus(unifiedNotificationService.getConnectionStatus());
+      } else {
+        toast.error('Failed to subscribe to push notifications');
+      }
+    } catch (error) {
+      console.error('Failed to subscribe to push notifications:', error);
+      toast.error('Failed to subscribe to push notifications');
+    }
+  };
+
+  const handleUnsubscribeFromPush = async () => {
+    try {
+      const success = await unifiedNotificationService.unsubscribeFromPush();
+      if (success) {
+        toast.success('Successfully unsubscribed from push notifications');
+        setConnectionStatus(unifiedNotificationService.getConnectionStatus());
+      } else {
+        toast.error('Failed to unsubscribe from push notifications');
+      }
+    } catch (error) {
+      console.error('Failed to unsubscribe from push notifications:', error);
+      toast.error('Failed to unsubscribe from push notifications');
+    }
+  };
+
+  const handleTestNotification = async (priority: 'low' | 'medium' | 'high' | 'urgent' = 'medium') => {
+    try {
+      await unifiedNotificationService.sendTestNotification(priority, false);
+      toast.success(`Test ${priority} priority notification sent!`);
+    } catch (error) {
+      console.error('Failed to send test notification:', error);
+      toast.error('Failed to send test notification');
+    }
   };
 
   const getNotificationIcon = (type: string, priority: string) => {
@@ -176,29 +221,30 @@ const InAppNotificationSystem: React.FC = () => {
   const getConnectionStatusText = () => {
     const { supabase, push } = connectionStatus;
     
-    if (supabase.isConnected && push.serviceWorkerRegistered) {
+    if (supabase.isConnected && push.pushSubscribed) {
       return 'Fully Connected';
     } else if (supabase.isConnected) {
       return 'In-App Connected';
     } else if (push.serviceWorkerRegistered) {
-      return 'Push Only';
+      return 'Push Ready';
     } else {
-      return 'Disconnected';
+      return 'Limited Connection';
     }
   };
 
   const getConnectionIcon = () => {
-    const { supabase } = connectionStatus;
-    return supabase.isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />;
+    const { supabase, push } = connectionStatus;
+    const isConnected = supabase.isConnected || push.serviceWorkerRegistered;
+    return isConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />;
   };
 
   const getConnectionVariant = () => {
     const { supabase, push } = connectionStatus;
     
-    if (supabase.isConnected && push.serviceWorkerRegistered) {
+    if (supabase.isConnected && push.pushSubscribed) {
       return 'default'; // Green
     } else if (supabase.isConnected || push.serviceWorkerRegistered) {
-      return 'secondary'; // Yellow/Orange
+      return 'secondary'; // Blue
     } else {
       return 'destructive'; // Red
     }
@@ -206,59 +252,140 @@ const InAppNotificationSystem: React.FC = () => {
 
   const visibleNotifications = notifications.filter(n => n.isVisible);
 
-  // Helper function to send test notifications
-  const sendTestNotification = async (priority: 'low' | 'medium' | 'high' | 'urgent' = 'medium') => {
-    try {
-      await unifiedNotificationService.sendTestNotification(priority, false);
-      toast.success(`Test ${priority} priority notification sent!`);
-    } catch (error) {
-      console.error('Failed to send test notification:', error);
-      toast.error('Failed to send test notification');
-    }
-  };
-
   return (
     <>
-      {/* Connection Status Indicator */}
+      {/* Connection Status and Settings */}
       <div className="fixed top-4 left-4 z-40 flex items-center gap-2">
         <Badge
           variant={getConnectionVariant()}
-          className="flex items-center gap-1"
+          className="flex items-center gap-1 cursor-pointer"
+          onClick={() => setShowSettings(!showSettings)}
         >
           {getConnectionIcon()}
           {getConnectionStatusText()}
         </Badge>
         
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowSettings(!showSettings)}
+          className="h-7 px-2"
+        >
+          <Settings className="h-3 w-3" />
+        </Button>
+
         {/* Debug Test Buttons - Remove in production */}
         {process.env.NODE_ENV === 'development' && (
           <div className="flex gap-1">
             <Button
-              onClick={() => sendTestNotification('low')}
+              onClick={() => handleTestNotification('low')}
               size="sm"
               variant="outline"
-              className="text-xs"
+              className="text-xs h-7 px-2"
             >
-              Test Low
+              Low
             </Button>
             <Button
-              onClick={() => sendTestNotification('medium')}
+              onClick={() => handleTestNotification('medium')}
               size="sm"
               variant="outline"
-              className="text-xs"
+              className="text-xs h-7 px-2"
             >
-              Test Med
+              Med
             </Button>
             <Button
-              onClick={() => sendTestNotification('high')}
+              onClick={() => handleTestNotification('high')}
               size="sm"
               variant="outline"
-              className="text-xs"
+              className="text-xs h-7 px-2"
             >
-              Test High
+              High
             </Button>
           </div>
         )}
       </div>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="fixed top-16 left-4 z-40 w-80">
+          <Card className="p-4 shadow-lg">
+            <h3 className="font-semibold mb-3">Notification Settings</h3>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Permission Status:</span>
+                <Badge variant={connectionStatus.permissionGranted ? 'default' : 'destructive'}>
+                  {connectionStatus.permissionGranted ? 'Granted' : 'Denied'}
+                </Badge>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Service Worker:</span>
+                <Badge variant={connectionStatus.push.serviceWorkerRegistered ? 'default' : 'secondary'}>
+                  {connectionStatus.push.serviceWorkerRegistered ? 'Ready' : 'Not Ready'}
+                </Badge>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Push Subscription:</span>
+                <Badge variant={connectionStatus.push.pushSubscribed ? 'default' : 'secondary'}>
+                  {connectionStatus.push.pushSubscribed ? 'Active' : 'Inactive'}
+                </Badge>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Supabase:</span>
+                <Badge variant={connectionStatus.supabase.isConnected ? 'default' : 'secondary'}>
+                  {connectionStatus.supabase.isConnected ? 'Connected' : 'Offline'}
+                </Badge>
+              </div>
+              
+              <div className="pt-2 space-y-2">
+                {!connectionStatus.permissionGranted && (
+                  <Button
+                    onClick={handleSubscribeToPush}
+                    size="sm"
+                    className="w-full"
+                  >
+                    Enable Notifications
+                  </Button>
+                )}
+                
+                {connectionStatus.permissionGranted && !connectionStatus.push.pushSubscribed && (
+                  <Button
+                    onClick={handleSubscribeToPush}
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Subscribe to Push
+                  </Button>
+                )}
+                
+                {connectionStatus.push.pushSubscribed && (
+                  <Button
+                    onClick={handleUnsubscribeFromPush}
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Unsubscribe
+                  </Button>
+                )}
+                
+                <Button
+                  onClick={() => handleTestNotification('medium')}
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                >
+                  Test Notification
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Notification Container */}
       {visibleNotifications.length > 0 && (
