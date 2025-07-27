@@ -1,3 +1,4 @@
+// src/App.tsx
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -27,75 +28,18 @@ const queryClient = new QueryClient({
 
 function App() {
   useEffect(() => {
-    // Initialize PWA and notification services on app start
+    // Initialize app with notification services
     const initializeApp = async () => {
       try {
         console.log('🚀 Initializing MCM Alerts App...');
         
-        // Initialize unified notification service (replaces pushService)
-        await unifiedNotificationService.initialize();
-        console.log('✅ Unified notification service initialized');
-
-        // Register service worker for PWA functionality
-        if ('serviceWorker' in navigator) {
-          try {
-            const registration = await navigator.serviceWorker.register('/sw.js', {
-              scope: '/',
-              updateViaCache: 'none'
-            });
-            
-            console.log('✅ Service Worker registered successfully:', registration.scope);
-            
-            // Handle service worker updates
-            registration.addEventListener('updatefound', () => {
-              const newWorker = registration.installing;
-              if (newWorker) {
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    console.log('🔄 New service worker available');
-                    // Optionally notify user about update
-                  }
-                });
-              }
-            });
-
-            // Listen for messages from service worker
-            navigator.serviceWorker.addEventListener('message', (event) => {
-              console.log('📨 Message from service worker:', event.data);
-              
-              if (event.data && event.data.type === 'PUSH_NOTIFICATION_RECEIVED') {
-                // Dispatch custom event for push notifications
-                const customEvent = new CustomEvent('push-notification-received', {
-                  detail: event.data.notificationData
-                });
-                window.dispatchEvent(customEvent);
-              }
-            });
-
-          } catch (error) {
-            console.error('❌ Service Worker registration failed:', error);
-          }
+        // Initialize unified notification service
+        const notificationSuccess = await unifiedNotificationService.initialize();
+        if (notificationSuccess) {
+          console.log('✅ Unified notification service initialized successfully');
         } else {
-          console.warn('⚠️ Service Worker not supported in this browser');
+          console.warn('⚠️ Notification service had initialization issues');
         }
-
-        // Set up PWA install prompt handling
-        let deferredPrompt: any = null;
-        
-        window.addEventListener('beforeinstallprompt', (e) => {
-          console.log('📲 PWA install prompt triggered');
-          e.preventDefault();
-          deferredPrompt = e;
-          
-          // Dispatch custom event to show install button
-          const installEvent = new CustomEvent('pwa-install-available', { detail: e });
-          window.dispatchEvent(installEvent);
-        });
-
-        window.addEventListener('appinstalled', () => {
-          console.log('✅ PWA installed successfully');
-          deferredPrompt = null;
-        });
 
         // Handle online/offline status
         const updateOnlineStatus = () => {
@@ -115,38 +59,29 @@ function App() {
         // Initial status check
         updateOnlineStatus();
 
-        // Set up API notification endpoint listener
-        // This creates a global handler for notifications sent via the API
-        const setupApiNotificationHandler = () => {
-          // Listen for push notifications from service worker
-          window.addEventListener('push-notification-received', (event: any) => {
-            console.log('🔔 Push notification received in app:', event.detail);
-            
-            // The unified service already handles these via its internal listeners
-            // Just log for debugging - the service will handle display automatically
-          });
+        // Handle PWA installation
+        let deferredPrompt: any = null;
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+          console.log('📲 PWA install prompt triggered');
+          e.preventDefault();
+          deferredPrompt = e;
+          
+          // Dispatch custom event to show install button
+          const installEvent = new CustomEvent('pwa-install-available', { detail: e });
+          window.dispatchEvent(installEvent);
+        });
 
-          // Listen for direct API notifications (when app is open)
-          window.addEventListener('api-notification-received', (event: any) => {
-            console.log('📡 API notification received:', event.detail);
-            
-            // You can add custom handling here if needed
-            // The unified service handles most cases automatically
-          });
+        window.addEventListener('appinstalled', () => {
+          console.log('✅ PWA installed successfully');
+          deferredPrompt = null;
+        });
 
-          // Set up unified service listeners for in-app notifications
-          unifiedNotificationService.addInAppListener((notification) => {
-            console.log('🔔 In-app notification:', notification);
-            // Additional custom handling can go here
-          });
-
-          unifiedNotificationService.addPushListener((notification) => {
-            console.log('📱 Push notification:', notification);
-            // Additional custom handling can go here
-          });
-        };
-
-        setupApiNotificationHandler();
+        // Set up global notification handler for API notifications
+        window.addEventListener('api-notification-received', (event: any) => {
+          console.log('📡 API notification received:', event.detail);
+          // The unified service handles these automatically
+        });
 
         console.log('🎉 MCM Alerts App initialized successfully');
 
@@ -159,7 +94,7 @@ function App() {
 
     // Cleanup function
     return () => {
-      // Clean up unified notification service
+      // Clean up unified notification service on unmount
       unifiedNotificationService.disconnect();
       
       // Remove event listeners
@@ -178,7 +113,7 @@ function App() {
       >
         <AuthProvider>
           <Router>
-            <div className="App">
+            <div className="App min-h-screen bg-background">
               {/* Global notification system overlay */}
               <InAppNotificationSystem />
               
