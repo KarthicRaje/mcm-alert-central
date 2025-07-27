@@ -2,85 +2,56 @@
 const { createClient } = require('@supabase/supabase-js');
 
 exports.handler = async (event) => {
-  // 1. First check environment variables
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_KEY = process.env.SUPABASE_KEY;
-  
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Server configuration error' }),
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
-    };
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Content-Type': 'application/json'
+  };
+
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
   }
 
-  // 2. Initialize Supabase client
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-  // 3. Validate request
-  if (!event.body) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'Missing request body' }),
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
-    };
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  let sub;
   try {
-    sub = JSON.parse(event.body);
-    if (!sub.endpoint || !sub.keys) {
-      throw new Error('Invalid subscription format');
+    const subscription = JSON.parse(event.body);
+    
+    // Validate subscription format
+    if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ 
+          error: 'Invalid subscription format',
+          details: 'Expected {endpoint, keys: {p256dh, auth}}'
+        })
+      };
     }
-  } catch (err) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'Invalid subscription data' }),
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
-    };
-  }
 
-  // 4. Store subscription
-  try {
-    const { data, error } = await supabase
+    const supabase = createClient(
+      process.env.VITE_SUPABASE_URL,
+      process.env.VITE_SUPABASE_ANON_KEY
+    );
+
+    const { error } = await supabase
       .from('push_subscriptions')
       .upsert({
-        endpoint: sub.endpoint,
-        keys: sub.keys,
-        created_at: new Date().toISOString(),
-        // Add user_id if available from your auth context
-        // user_id: event.headers['x-user-id'] 
-      }, {
-        onConflict: 'endpoint' // Update if endpoint exists
-      });
+        endpoint: subscription.endpoint,
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'endpoint' });
 
     if (error) throw error;
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify(data),
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
-    };
+    return { statusCode: 200, headers, body: JSON.stringify({ success: true }) };
   } catch (error) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: error.message }),
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
+      headers,
+      body: JSON.stringify({ error: error.message })
     };
   }
 };
