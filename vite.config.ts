@@ -1,122 +1,83 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path';
 
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      strategies: 'generateSW',
+      strategies: 'injectManifest',
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'notification.mp3'],
+      srcDir: 'public',
+      filename: 'service-worker.js',
+      includeAssets: ['favicon.ico', 'mcm-logo-192.png', 'mcm-logo-512.png'],
       manifest: {
-        name: 'MCM Alerts',
+        name: 'MCM Alerts - Real-time Monitoring System',
         short_name: 'MCM Alerts',
-        description: 'MCM Alert Management System',
-        theme_color: '#ffffff',
-        background_color: '#ffffff',
+        description: 'Real-time monitoring and alert system with push notifications',
+        theme_color: '#1e293b',
+        background_color: '#1e293b',
         display: 'standalone',
+        orientation: 'portrait-primary',
         start_url: '/',
+        scope: '/',
         icons: [
           {
-            src: 'mcm-logo-192.png',
+            src: '/mcm-logo-192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
-            src: 'mcm-logo-512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: 'mcm-logo-512.png',
+            src: '/mcm-logo-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
+          },
+          {
+            src: '/mcm-logo-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'monochrome'
+          }
+        ],
+        categories: ['monitoring', 'productivity', 'utilities'],
+        lang: 'en',
+        dir: 'ltr',
+        prefer_related_applications: false,
+        shortcuts: [
+          {
+            name: 'Dashboard',
+            short_name: 'Dashboard',
+            description: 'Open MCM Alerts Dashboard',
+            url: '/',
+            icons: [{ src: '/mcm-logo-192.png', sizes: '192x192' }]
           }
         ]
       },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,mp3,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/api\.example\.com\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 10,
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 // 1 day
-              }
-            }
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-              }
-            }
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'gstatic-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-              }
-            }
-          },
-          {
-            urlPattern: ({ request }) => request.destination === 'image',
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'images-cache',
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
-              }
-            }
-          }
+      injectManifest: {
+        swSrc: 'public/service-worker.js',
+        swDest: 'dist/service-worker.js',
+        globDirectory: 'dist',
+        globPatterns: [
+          '**/*.{js,css,html,ico,png,svg}'
         ],
-        // Enable navigation preload
-        navigationPreload: true,
-        // Configure for offline support
-        clientsClaim: true,
-        skipWaiting: true,
-        // Configure for push notifications
-        cleanupOutdatedCaches: true,
-        offlineGoogleAnalytics: false
+        maximumFileSizeToCacheInBytes: 5000000
       },
       devOptions: {
         enabled: true,
         type: 'module',
         navigateFallback: 'index.html'
-      },
-      // Custom service worker for notifications
-      injectManifest: {
-        swSrc: 'src/sw.js',
-        swDest: 'dist/sw.js',
-        globDirectory: 'dist',
-        globPatterns: [
-          '**/*.{js,css,html,ico,png,svg,mp3}'
-        ]
       }
     })
   ],
   resolve: {
     alias: {
-      '@': '/src'
+      '@': path.resolve(__dirname, './src')
     }
   },
   build: {
-    // Ensure assets are properly cached
     assetsInlineLimit: 4096,
     rollupOptions: {
       output: {
@@ -125,5 +86,9 @@ export default defineConfig({
         entryFileNames: 'assets/[name].[hash].js'
       }
     }
+  },
+  server: {
+    port: 5173,
+    host: true
   }
 });
