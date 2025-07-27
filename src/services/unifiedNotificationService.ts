@@ -1,7 +1,7 @@
 // src/services/unifiedNotificationService.ts
 import { createClient } from '@supabase/supabase-js'
 
-// ✅ Enhanced environment variable handling with fallbacks and validation
+// Enhanced environment variable handling with fallbacks and validation
 const getSupabaseConfig = () => {
   const supabaseUrl = 
     import.meta.env?.VITE_APP_SUPABASE_URL ||
