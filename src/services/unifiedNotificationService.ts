@@ -556,7 +556,7 @@ export class UnifiedNotificationService {
 
   private async sendSubscriptionToServer(subscription: PushSubscription) {
     try {
-      const response = await fetch('/api/push/subscribe', {
+      const response = await fetch('/.netlify/functions/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
