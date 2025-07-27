@@ -18,3 +18,9 @@ exports.handler = async (event) => {
   }
   return { statusCode: 200, body: JSON.stringify(data) };
 };
+console.log('SUPABASE_URL:', SUPABASE_URL);
+console.log('SUPABASE_KEY:', SUPABASE_KEY);
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  return { statusCode: 500, body: JSON.stringify({ error: 'Missing Supabase environment variables' }) };
+}
