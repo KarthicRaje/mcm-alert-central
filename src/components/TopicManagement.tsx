@@ -240,16 +240,17 @@ const TopicManagement: React.FC = () => {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+      <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0 pb-3 md:pb-4">
         <div>
-          <CardTitle>Notification Subscriptions</CardTitle>
-          <Badge variant="outline" className="mt-2">{topics.filter(t => t.enabled).length} Active</Badge>
+          <CardTitle className="text-lg md:text-xl">Notification Subscriptions</CardTitle>
+          <Badge variant="outline" className="mt-1 md:mt-2 text-xs">{topics.filter(t => t.enabled).length} Active</Badge>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="flex items-center space-x-2" disabled={creatingTopic || loadingTopics}>
-              <Plus className="h-4 w-4" />
-              <span>Add Topic</span>
+            <Button size="sm" className="flex items-center space-x-1 md:space-x-2 h-8 md:h-9 text-xs md:text-sm" disabled={creatingTopic || loadingTopics}>
+              <Plus className="h-3 w-3 md:h-4 md:w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Add Topic</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
@@ -290,27 +291,27 @@ const TopicManagement: React.FC = () => {
           </DialogContent>
         </Dialog>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 md:space-y-4">
         {loadingTopics ? (
-          <p className="text-center text-muted-foreground">Loading topics...</p>
+          <p className="text-center text-muted-foreground text-sm">Loading topics...</p>
         ) : (
           topics.map((topic) => (
             <div
               key={topic.id}
-              className="flex items-center justify-between p-4 border border-border rounded-lg transition-opacity duration-300 ease-in-out"
+              className="flex items-center justify-between p-3 md:p-4 border border-border rounded-lg transition-opacity duration-300 ease-in-out"
               style={{ opacity: deletingTopicId === topic.id ? 0.5 : 1 }}
             >
-              <div className="flex items-center space-x-4">
-                <Monitor className="h-5 w-5 text-primary" />
-                <div>
-                  <p className="font-medium">{topic.name}</p>
-                  <p className="text-sm text-muted-foreground">{topic.description}</p>
+              <div className="flex items-center space-x-3 md:space-x-4 flex-1 min-w-0">
+                <Monitor className="h-4 w-4 md:h-5 md:w-5 text-primary flex-shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm md:text-base truncate">{topic.name}</p>
+                  <p className="text-xs md:text-sm text-muted-foreground line-clamp-2">{topic.description}</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Last checked: {formatLastChecked(topic.lastChecked)}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
                 <Switch
                   checked={topic.enabled}
                   onCheckedChange={() => toggleTopic(topic.id)}
@@ -318,13 +319,13 @@ const TopicManagement: React.FC = () => {
                 />
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="sm" 
                   className="text-destructive hover:bg-destructive/10"
                   onClick={() => confirmDelete(topic)}
                   disabled={deletingTopicId === topic.id}
                   aria-label={`Delete topic ${topic.name}`}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3 w-3 md:h-4 md:w-4" />
                 </Button>
               </div>
             </div>
