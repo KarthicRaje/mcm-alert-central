@@ -148,36 +148,40 @@ const AllNotifications: React.FC = () => {
   }
 
   return (
-    <Card>
+    <div className="container mx-auto px-4 py-6">
+    <Card className="w-full">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
+            <Bell className="h-4 w-4 md:h-5 md:w-5" />
             All Notifications
             {unreadCount > 0 && (
-              <Badge variant="destructive" className="ml-2">
+              <Badge variant="destructive" className="ml-2 text-xs">
                 {unreadCount} unread
               </Badge>
             )}
           </CardTitle>
-          <div className="flex gap-2">
+          <div className="flex gap-1 md:gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={handleRefresh}
               disabled={refreshing}
+              className="h-8 md:h-9 text-xs md:text-sm px-2 md:px-3"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-              Refresh
+              <RefreshCw className={`h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
             </Button>
             {unreadCount > 0 && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={markAllAsRead}
+                className="h-8 md:h-9 text-xs md:text-sm px-2 md:px-3"
               >
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Mark All Read
+                <CheckCircle className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
+                <span className="hidden sm:inline">Mark All Read</span>
+                <span className="sm:hidden">Read All</span>
               </Button>
             )}
           </div>
@@ -185,54 +189,54 @@ const AllNotifications: React.FC = () => {
       </CardHeader>
       <CardContent>
         {notifications.length === 0 ? (
-          <div className="text-center py-8">
-            <Bell className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No notifications found.</p>
+          <div className="text-center py-6 md:py-8">
+            <Bell className="h-8 w-8 md:h-12 md:w-12 mx-auto text-muted-foreground mb-3 md:mb-4" />
+            <p className="text-sm md:text-base text-muted-foreground">No notifications found.</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2 md:space-y-3">
             {notifications.map((notification) => (
               <div 
                 key={notification.id} 
-                className={`p-4 rounded-lg border transition-all hover:shadow-sm ${
+                className={`p-3 md:p-4 rounded-lg border transition-all hover:shadow-sm ${
                   notification.is_read 
                     ? 'bg-muted/30 border-muted' 
                     : 'bg-background border-border shadow-sm'
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start justify-between gap-2 md:gap-3">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-lg">{getTypeIcon(notification.type)}</span>
-                      <div className="font-semibold text-foreground">
+                    <div className="flex items-center gap-2 mb-1 md:mb-2">
+                      <span className="text-base md:text-lg">{getTypeIcon(notification.type)}</span>
+                      <div className="font-semibold text-sm md:text-base text-foreground">
                         {notification.title}
                       </div>
-                      <Badge className={getPriorityColor(notification.priority)}>
+                      <Badge className={`${getPriorityColor(notification.priority)} text-xs px-1.5 py-0.5`}>
                         {notification.priority}
                       </Badge>
                       {!notification.is_read && (
-                        <Badge variant="secondary" className="text-xs">
-                          <Clock className="h-3 w-3 mr-1" />
+                        <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
+                          <Clock className="h-2.5 w-2.5 md:h-3 md:w-3 mr-1" />
                           New
                         </Badge>
                       )}
                     </div>
                     
-                    <div className="text-muted-foreground mb-3">
+                    <div className="text-xs md:text-sm text-muted-foreground mb-2 md:mb-3">
                       {notification.message || notification.body}
                     </div>
                     
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <div className="flex items-center gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-muted-foreground gap-1 sm:gap-4">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
                         <span>
                           {new Date(notification.created_at || notification.timestamp).toLocaleString()}
                         </span>
                         {notification.site && (
-                          <span className="text-blue-600">
+                          <span className="text-blue-600 text-xs">
                             Source: {notification.site}
                           </span>
                         )}
-                        <span className="text-green-600">
+                        <span className="text-green-600 text-xs">
                           Type: {notification.type}
                         </span>
                       </div>
@@ -244,9 +248,9 @@ const AllNotifications: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => markAsRead(notification.id)}
-                      className="shrink-0"
+                      className="shrink-0 h-7 w-7 md:h-8 md:w-8 p-0"
                     >
-                      <CheckCircle className="h-4 w-4" />
+                      <CheckCircle className="h-3 w-3 md:h-4 md:w-4" />
                     </Button>
                   )}
                 </div>
@@ -256,6 +260,7 @@ const AllNotifications: React.FC = () => {
         )}
       </CardContent>
     </Card>
+    </div>
   );
 };
 
