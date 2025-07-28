@@ -1,8 +1,10 @@
 // src/sw.js
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { clientsClaim } from 'workbox-core';
+import { registerRoute } from 'workbox-routing';
+import { NetworkFirst } from 'workbox-strategies';
 
-// This is required for Workbox to inject the manifest
+// Precache and route all assets
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
@@ -10,232 +12,258 @@ cleanupOutdatedCaches();
 self.skipWaiting();
 clientsClaim();
 
-console.log('MCM Alerts Service Worker loaded with enhanced push notification support');
+// Cache API responses for offline use
+registerRoute(
+  ({url}) => url.pathname.startsWith('/api/'),
+  new NetworkFirst({
+    cacheName: 'api-cache',
+    plugins: [
+      {
+        cacheWillUpdate: async ({response}) => {
+          // Only cache successful responses
+          return response.status === 200 ? response : null;
+        }
+      }
+    ]
+  })
+);
+
+// Notification constants
+const DEFAULT_ICON = '/mcm-logo-192.png';
+const DEFAULT_BADGE = '/mcm-logo-192.png';
+const DEFAULT_ACTIONS = [
+  { action: 'view', title: 'View Dashboard', icon: DEFAULT_ICON },
+  { action: 'dismiss', title: 'Dismiss' }
+];
 
 // Enhanced push notification handler
 self.addEventListener('push', event => {
-  console.log('Push notification received:', event);
-  
-  let notificationData = {
-    title: 'MCM Alert',
-    body: 'New notification received',
-    icon: '/mcm-logo-192.png',
-    badge: '/mcm-logo-192.png',
-    tag: 'mcm-notification',
-    requireInteraction: false,
-    silent: false,
-    vibrate: [200, 100, 200],
-    actions: [
-      { action: 'view', title: 'View Dashboard', icon: '/mcm-logo-192.png' },
-      { action: 'dismiss', title: 'Dismiss' }
-    ],
-    data: {
-      url: '/',
-      timestamp: Date.now()
-    }
-  };
-
-  if (event.data) {
+  const handlePushNotification = async () => {
     try {
-      const pushData = event.data.json();
-      console.log('Push data received:', pushData);
-      
-      notificationData = {
-        ...notificationData,
-        title: pushData.title || notificationData.title,
-        body: pushData.message || pushData.body || notificationData.body,
-        data: { 
-          ...notificationData.data, 
-          ...pushData.data,
-          type: pushData.type,
-          priority: pushData.priority,
-          site: pushData.site,
-          id: pushData.id || `push-${Date.now()}`
+      // Default notification data
+      let notificationData = {
+        title: 'MCM Alert',
+        body: 'New notification received',
+        icon: DEFAULT_ICON,
+        badge: DEFAULT_BADGE,
+        tag: `mcm-notification-${Date.now()}`,
+        requireInteraction: false,
+        silent: false,
+        vibrate: [200, 100, 200],
+        actions: DEFAULT_ACTIONS,
+        data: {
+          url: '/',
+          timestamp: Date.now()
         }
       };
-      
-      // Set priority-based options
-      if (pushData.priority === 'high' || pushData.priority === 'urgent') {
-        notificationData.requireInteraction = true;
-        notificationData.vibrate = [300, 100, 300, 100, 300];
-        notificationData.tag = `mcm-urgent-${Date.now()}`;
-      } else if (pushData.priority === 'low') {
-        notificationData.vibrate = [100];
-        notificationData.tag = `mcm-low-${Date.now()}`;
-      } else {
-        notificationData.vibrate = [200, 100, 200];
-        notificationData.tag = `mcm-medium-${Date.now()}`;
-      }
-    } catch (error) {
-      console.error('Error parsing push data:', error);
-    }
-  }
 
-  event.waitUntil(
-    self.registration.showNotification(notificationData.title, {
-      body: notificationData.body,
-      icon: notificationData.icon,
-      badge: notificationData.badge,
-      tag: notificationData.tag,
-      requireInteraction: notificationData.requireInteraction,
-      silent: notificationData.silent,
-      vibrate: notificationData.vibrate,
-      actions: notificationData.actions,
-      data: notificationData.data,
-      timestamp: Date.now()
-    }).then(() => {
+      // Process incoming push data
+      if (event.data) {
+        try {
+          const pushData = event.data.json();
+          console.log('Push data received:', pushData);
+          
+          // Merge with default data
+          notificationData = {
+            ...notificationData,
+            title: pushData.title || notificationData.title,
+            body: pushData.message || pushData.body || notificationData.body,
+            data: { 
+              ...notificationData.data, 
+              ...pushData,
+              id: pushData.id || `push-${Date.now()}`
+            }
+          };
+          
+          // Set priority-based options
+          switch (pushData.priority) {
+            case 'high':
+            case 'urgent':
+              notificationData.requireInteraction = true;
+              notificationData.vibrate = [300, 100, 300, 100, 300];
+              notificationData.tag = `mcm-urgent-${Date.now()}`;
+              break;
+            case 'low':
+              notificationData.vibrate = [100];
+              notificationData.tag = `mcm-low-${Date.now()}`;
+              break;
+            default:
+              notificationData.vibrate = [200, 100, 200];
+              notificationData.tag = `mcm-medium-${Date.now()}`;
+          }
+        } catch (error) {
+          console.error('Error parsing push data:', error);
+        }
+      }
+
+      // Show the notification
+      await self.registration.showNotification(
+        notificationData.title, 
+        notificationData
+      );
       console.log('Push notification displayed successfully');
       
       // Notify all clients about the new notification
-      return self.clients.matchAll().then(clients => {
-        clients.forEach(client => {
-          client.postMessage({
-            type: 'PUSH_NOTIFICATION_RECEIVED',
-            notificationData: notificationData,
-            timestamp: Date.now()
-          });
+      const clients = await self.clients.matchAll();
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'PUSH_NOTIFICATION_RECEIVED',
+          notificationData,
+          timestamp: Date.now()
         });
       });
-    }).catch(error => {
-      console.error('Failed to show push notification:', error);
-    })
-  );
+    } catch (error) {
+      console.error('Failed to handle push notification:', error);
+    }
+  };
+
+  event.waitUntil(handlePushNotification());
 });
 
 // Enhanced notification click handler
 self.addEventListener('notificationclick', event => {
-  console.log('Notification clicked:', event);
-  
-  event.notification.close();
-  
-  const urlToOpen = event.notification.data?.url || '/';
-  const notificationId = event.notification.data?.id;
-  
-  if (event.action === 'view' || !event.action) {
-    event.waitUntil(
-      clients.matchAll({ type: 'window', includeUncontrolled: true })
-        .then(clientList => {
-          // Check if app is already open
-          for (const client of clientList) {
-            if (client.url.includes(urlToOpen)) {
-              // Send message to mark notification as read
-              if (notificationId) {
-                client.postMessage({
-                  type: 'MARK_NOTIFICATION_READ',
-                  notificationId: notificationId
-                });
-              }
-              return client.focus();
-            }
+  const handleNotificationClick = async () => {
+    event.notification.close();
+    const { data } = event.notification;
+    const urlToOpen = data?.url || '/';
+    
+    try {
+      const clients = await self.clients.matchAll({ 
+        type: 'window', 
+        includeUncontrolled: true 
+      });
+      
+      // Handle different actions
+      switch (event.action) {
+        case 'view':
+        case undefined:
+          // Check for existing client
+          const focusedClient = clients.find(client => 
+            client.url.includes(urlToOpen)
+          );
+          
+          if (focusedClient) {
+            await focusedClient.focus();
+          } else {
+            await self.clients.openWindow(urlToOpen);
           }
-          // Open new window if none found
-          return clients.openWindow(urlToOpen);
-        })
-        .catch(error => {
-          console.error('Error handling notification click:', error);
-        })
-    );
-  } else if (event.action === 'dismiss') {
-    // Send message to clients to mark as read
-    if (notificationId) {
-      self.clients.matchAll().then(clients => {
+          break;
+          
+        case 'dismiss':
+          // No action needed beyond closing
+          break;
+      }
+      
+      // Mark as read in all cases
+      if (data?.id) {
         clients.forEach(client => {
           client.postMessage({
             type: 'MARK_NOTIFICATION_READ',
-            notificationId: notificationId
+            notificationId: data.id
           });
         });
-      });
+      }
+    } catch (error) {
+      console.error('Error handling notification click:', error);
     }
-  }
+  };
+
+  event.waitUntil(handleNotificationClick());
 });
 
 // Handle notification close
 self.addEventListener('notificationclose', event => {
   console.log('Notification closed:', event.notification.tag);
+  const { data } = event.notification;
   
-  const notificationId = event.notification.data?.id;
-  if (notificationId) {
-    // Optionally mark as read when closed
+  if (data?.id) {
     self.clients.matchAll().then(clients => {
       clients.forEach(client => {
         client.postMessage({
           type: 'NOTIFICATION_CLOSED',
-          notificationId: notificationId
+          notificationId: data.id
         });
       });
     });
   }
 });
 
-// Enhanced message handler from main thread
+// Message handler from main thread
 self.addEventListener('message', event => {
-  console.log('Service Worker received message:', event.data);
+  const { data, ports } = event;
   
-  if (event.data?.type === 'SHOW_NOTIFICATION') {
-    const { title, body, options = {} } = event.data;
-    
-    const notificationOptions = {
-      body,
-      icon: options.icon || '/mcm-logo-192.png',
-      badge: options.badge || '/mcm-logo-192.png',
-      tag: options.tag || `mcm-manual-${Date.now()}`,
-      requireInteraction: options.priority === 'high' || options.priority === 'urgent',
-      vibrate: options.priority === 'high' || options.priority === 'urgent' 
-        ? [300, 100, 300] 
-        : [200, 100, 200],
-      actions: [
-        { action: 'view', title: 'View Dashboard', icon: '/mcm-logo-192.png' },
-        { action: 'dismiss', title: 'Dismiss' }
-      ],
-      data: {
-        url: '/',
-        timestamp: Date.now(),
-        ...options.data
-      },
-      ...options
-    };
-    
-    self.registration.showNotification(title, notificationOptions)
-      .then(() => {
-        console.log('Manual notification displayed successfully');
-        if (event.ports?.[0]) {
-          event.ports[0].postMessage({ success: true });
-        }
-      })
-      .catch(error => {
-        console.error('Failed to show manual notification:', error);
-        if (event.ports?.[0]) {
-          event.ports[0].postMessage({ success: false, error: error.message });
-        }
-      });
-  }
-  
-  if (event.data?.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  const respond = (response) => {
+    if (ports?.[0]) {
+      ports[0].postMessage(response);
+    }
+  };
+
+  const handleMessage = async () => {
+    try {
+      switch (data?.type) {
+        case 'SHOW_NOTIFICATION':
+          const { title, body, options = {} } = data;
+          const notificationOptions = {
+            body,
+            icon: options.icon || DEFAULT_ICON,
+            badge: options.badge || DEFAULT_BADGE,
+            tag: options.tag || `mcm-manual-${Date.now()}`,
+            requireInteraction: ['high', 'urgent'].includes(options.priority),
+            vibrate: ['high', 'urgent'].includes(options.priority) 
+              ? [300, 100, 300] 
+              : [200, 100, 200],
+            actions: DEFAULT_ACTIONS,
+            data: {
+              url: '/',
+              timestamp: Date.now(),
+              ...options.data
+            },
+            ...options
+          };
+          
+          await self.registration.showNotification(title, notificationOptions);
+          console.log('Manual notification displayed successfully');
+          respond({ success: true });
+          break;
+          
+        case 'SKIP_WAITING':
+          self.skipWaiting();
+          respond({ success: true });
+          break;
+          
+        default:
+          respond({ success: false, error: 'Unknown message type' });
+      }
+    } catch (error) {
+      console.error('Error handling message:', error);
+      respond({ success: false, error: error.message });
+    }
+  };
+
+  handleMessage();
 });
 
-// Background sync for offline notifications (optional)
+// Background sync for offline notifications
 self.addEventListener('sync', event => {
   if (event.tag === 'notification-sync') {
-    event.waitUntil(
-      fetch('/api/notifications/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lastSync: Date.now() })
-      })
-      .then(response => response.json())
-      .then(data => {
+    const handleSync = async () => {
+      try {
+        const response = await fetch('/api/notifications/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lastSync: Date.now() })
+        });
+        
+        const data = await response.json();
         console.log('Background sync completed:', data);
         
         if (data.notifications?.length > 0) {
-          return Promise.all(
+          await Promise.all(
             data.notifications.map(notification => 
               self.registration.showNotification(notification.title, {
                 body: notification.body || notification.message,
-                icon: '/mcm-logo-192.png',
-                badge: '/mcm-logo-192.png',
+                icon: DEFAULT_ICON,
+                badge: DEFAULT_BADGE,
                 tag: `mcm-sync-${Date.now()}`,
                 data: { 
                   ...notification,
@@ -246,12 +274,21 @@ self.addEventListener('sync', event => {
             )
           );
         }
-      })
-      .catch(error => {
+      } catch (error) {
         console.error('Background sync failed:', error);
-      })
-    );
+      }
+    };
+
+    event.waitUntil(handleSync());
   }
 });
 
-console.log('MCM Alerts Service Worker initialized with full notification support');
+// Periodic sync for updates (requires Periodic Background Sync API)
+self.addEventListener('periodicsync', event => {
+  if (event.tag === 'notification-update') {
+    console.log('Periodic sync for notifications');
+    // Implement your periodic sync logic here
+  }
+});
+
+console.log('MCM Alerts Service Worker initialized with enhanced features');
