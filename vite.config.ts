@@ -1,6 +1,7 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react-swc'
-import { VitePWA } from 'vite-plugin-pwa'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react-swc';
+import { VitePWA } from 'vite-plugin-pwa';
+import path from 'path'; // Import path module
 
 export default defineConfig({
   plugins: [
@@ -36,5 +37,20 @@ export default defineConfig({
         type: 'module'
       }
     })
-  ]
-})
+  ],
+  // Add resolve.alias configuration
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      // Add other aliases if needed
+    }
+  },
+  // Optional: Add build configuration
+  build: {
+    sourcemap: true,
+    rollupOptions: {
+      // Add any external dependencies that shouldn't be bundled
+      external: []
+    }
+  }
+});
